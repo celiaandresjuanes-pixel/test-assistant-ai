@@ -72,6 +72,11 @@ button {
 
 button:hover { opacity: .88; }
 
+button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
 .result {
   background: #f5f7fa;
   padding: 15px;
@@ -90,7 +95,25 @@ button:hover { opacity: .88; }
   font-size: 12px;
   background: #fafafa;
 }
+
+.file-box {
+  background: #f5f7fa;
+  padding: 15px;
+  border-radius: 8px;
+  margin-top: 10px;
+}
+
+#fileStatus {
+  white-space: pre-line;
+}
 </style>
+
+<!-- Librería para leer PDF -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+<!-- Librería para leer archivos PowerPoint -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
 </head>
 
 <body>
@@ -121,9 +144,38 @@ button:hover { opacity: .88; }
   <label>Opción D</label>
   <input id="d" placeholder="Respuesta D">
 
+  <div class="file-box">
+
+    <strong>📚 Añadir documentación</strong>
+
+    <p class="small">
+      Selecciona archivos PDF o PowerPoint (.pptx) de tus materiales
+      de estudio. Puedes seleccionar varios.
+    </p>
+
+    <label for="files">Seleccionar archivos</label>
+
+    <input
+      type="file"
+      id="files"
+      accept=".pdf,.pptx"
+      multiple
+    >
+
+    <button class="secondary" onclick="extractFiles()">
+      Leer documentación
+    </button>
+
+    <p id="fileStatus" class="small">
+      Todavía no se han procesado documentos.
+    </p>
+
+  </div>
+
   <label>Documentación adicional (opcional)</label>
+
   <textarea id="docs"
-    placeholder="Pega fragmentos de apuntes o documentación autorizada..."></textarea>
+    placeholder="También puedes pegar aquí fragmentos de apuntes..."></textarea>
 
   <button class="primary" onclick="generatePrompt()">
     Preparar análisis con IA
@@ -132,7 +184,9 @@ button:hover { opacity: .88; }
   <div id="output" style="display:none">
 
     <div class="result">
+
       <strong>Consulta preparada</strong>
+
       <p class="small">
         Copia el contenido y pégalo en tu conversación de ChatGPT.
       </p>
@@ -148,20 +202,188 @@ button:hover { opacity: .88; }
       </button>
 
       <p id="status" class="small"></p>
+
     </div>
 
   </div>
 
   <p class="small" style="margin-top:25px">
     Herramienta de apoyo para simulacros y evaluaciones de práctica
-    autorizadas. No envía automáticamente información a servicios
-    externos. Revisa el contenido antes de compartirlo.
+    autorizadas. Los documentos se procesan en el navegador y no se
+    envían automáticamente a servicios externos. Revisa el contenido
+    antes de compartirlo.
   </p>
 
 </div>
 
 <script>
 
+// Configurar el lector PDF
+if (window.pdfjsLib) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+}
+
+// Límite de texto para evitar consultas excesivamente largas
+const MAX_TEXT = 45000;
+
+// Texto extraído de los documentos
+let extractedText = "";
+
+// Leer todos los archivos seleccionados
+async function extractFiles() {
+
+  const files = document.getElementById("files").files;
+  const status = document.getElementById("fileStatus");
+
+  if (!files.length) {
+    alert("Selecciona primero un archivo PDF o PowerPoint.");
+    return;
+  }
+
+  if (!window.pdfjsLib || !window.JSZip) {
+    status.textContent =
+      "No se han podido cargar las librerías. Comprueba tu conexión a Internet.";
+    return;
+  }
+
+  status.textContent = "Leyendo documentación...";
+
+  extractedText = "";
+
+  let result = "";
+
+  for (const file of files) {
+
+    try {
+
+      const extension = file.name.split(".").pop().toLowerCase();
+
+      let text = "";
+
+      if (extension === "pdf") {
+        text = await readPDF(file);
+      }
+
+      else if (extension === "pptx") {
+        text = await readPPTX(file);
+      }
+
+      else {
+        result += "\nFormato no compatible: " + file.name;
+        continue;
+      }
+
+      result += "\n\nDOCUMENTO: " + file.name + "\n";
+      result += text;
+
+    } catch (error) {
+
+      result += "\nNo se pudo leer: " + file.name;
+      console.error(error);
+
+    }
+  }
+
+  extractedText = result.trim().slice(0, MAX_TEXT);
+
+  if (extractedText) {
+
+    status.textContent =
+      "Documentación procesada correctamente.\n" +
+      "Caracteres extraídos: " + extractedText.length +
+      (result.length > MAX_TEXT
+        ? "\nAviso: se ha limitado el texto para evitar consultas demasiado largas."
+        : "");
+
+  } else {
+
+    status.textContent =
+      "No se ha podido extraer texto de los documentos.";
+
+  }
+}
+
+
+// Extraer texto de un PDF
+async function readPDF(file) {
+
+  const buffer = await file.arrayBuffer();
+
+  const pdf = await pdfjsLib.getDocument({
+    data: new Uint8Array(buffer)
+  }).promise;
+
+  let text = "";
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+
+    const pageText = content.items
+      .map(item => item.str)
+      .join(" ");
+
+    text += "\nPágina " + i + ":\n" + pageText;
+
+    if (text.length >= MAX_TEXT) break;
+  }
+
+  return text;
+}
+
+
+// Extraer texto de un PowerPoint PPTX
+async function readPPTX(file) {
+
+  const buffer = await file.arrayBuffer();
+
+  const zip = await JSZip.loadAsync(buffer);
+
+  const slideFiles = Object.keys(zip.files)
+    .filter(name => /^ppt\/slides\/slide\d+\.xml$/.test(name))
+    .sort((a, b) => {
+      const numA = Number(a.match(/slide(\d+)/)[1]);
+      const numB = Number(b.match(/slide(\d+)/)[1]);
+      return numA - numB;
+    });
+
+  let text = "";
+
+  for (const slideFile of slideFiles) {
+
+    const xml = await zip.file(slideFile).async("text");
+
+    const documentXML = new DOMParser().parseFromString(
+      xml,
+      "application/xml"
+    );
+
+    const textElements =
+      documentXML.getElementsByTagNameNS("*", "t");
+
+    let slideText = [];
+
+    for (const element of textElements) {
+      if (element.textContent.trim()) {
+        slideText.push(element.textContent.trim());
+      }
+    }
+
+    const slideNumber = slideFile.match(/slide(\d+)/)[1];
+
+    text += "\nDiapositiva " + slideNumber + ":\n";
+    text += slideText.join(" ");
+
+    if (text.length >= MAX_TEXT) break;
+  }
+
+  return text;
+}
+
+
+// Preparar consulta para ChatGPT
 function generatePrompt() {
 
   const subject = document.getElementById("subject").value.trim();
@@ -171,12 +393,18 @@ function generatePrompt() {
   const b = document.getElementById("b").value.trim();
   const c = document.getElementById("c").value.trim();
   const d = document.getElementById("d").value.trim();
-  const docs = document.getElementById("docs").value.trim();
+
+  const manualDocs = document.getElementById("docs").value.trim();
 
   if (!question || !a || !b || !c || !d) {
     alert("Completa la pregunta y las cuatro opciones.");
     return;
   }
+
+  const documentation = [
+    manualDocs,
+    extractedText
+  ].filter(Boolean).join("\n\n");
 
   const prompt = `
 Actúa como un tutor académico experto en preguntas tipo test.
@@ -194,48 +422,64 @@ C) ${c}
 D) ${d}
 
 DOCUMENTACIÓN PROPORCIONADA:
-${docs || "No se ha proporcionado documentación específica."}
+${documentation || "No se ha proporcionado documentación específica."}
 
 INSTRUCCIONES:
 
 1. Analiza cuidadosamente la pregunta.
 2. Contrasta las cuatro opciones.
-3. Prioriza la documentación proporcionada cuando exista.
-4. Si falta información, utiliza conocimientos contrastados y,
-   cuando tengas acceso a búsqueda web, consulta fuentes fiables.
+3. Prioriza la documentación proporcionada.
+4. Si utilizas información externa, identifica claramente
+   qué parte procede de conocimientos generales.
 5. No inventes referencias ni afirmes haber consultado fuentes
    que no hayas podido verificar.
 6. Si hay ambigüedad, indícalo expresamente.
+7. Si la documentación no permite resolver la pregunta,
+   reconoce esa limitación.
 
 FORMATO DE RESPUESTA:
 
 - Opción propuesta: A, B, C o D.
 - Explicación breve.
 - Por qué las otras opciones no son adecuadas.
-- Fuente o fundamento utilizado.
+- Fundamento concreto en los apuntes, si existe.
 - Nivel de confianza: alto, medio o bajo.
 `;
 
   document.getElementById("prompt").value = prompt;
+
   document.getElementById("output").style.display = "block";
+
   document.getElementById("status").textContent =
     "Consulta preparada correctamente.";
 }
 
+
+// Copiar consulta
 async function copyPrompt() {
 
   const text = document.getElementById("prompt").value;
   const status = document.getElementById("status");
 
   try {
+
     await navigator.clipboard.writeText(text);
-    status.textContent = "Consulta copiada. Ya puedes pegarla en ChatGPT.";
+
+    status.textContent =
+      "Consulta copiada. Ya puedes pegarla en ChatGPT.";
+
   } catch (error) {
+
     document.getElementById("prompt").select();
-    status.textContent = "Selecciona y copia el texto manualmente.";
+
+    status.textContent =
+      "Selecciona y copia el texto manualmente.";
+
   }
 }
 
+
+// Abrir ChatGPT
 function openChatGPT() {
   window.open("https://chatgpt.com/", "_blank");
 }
@@ -244,3 +488,4 @@ function openChatGPT() {
 
 </body>
 </html>
+
