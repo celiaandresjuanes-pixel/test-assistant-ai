@@ -1,0 +1,246 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Test Assistant AI</title>
+
+<style>
+* { box-sizing: border-box; }
+
+body {
+  font-family: Arial, sans-serif;
+  background: #f3f5f8;
+  color: #202938;
+  margin: 0;
+  padding: 24px;
+}
+
+.container {
+  max-width: 650px;
+  margin: 20px auto;
+  background: white;
+  padding: 25px;
+  border-radius: 14px;
+  box-shadow: 0 4px 20px #0000000d;
+}
+
+h1 { margin: 0; font-size: 24px; }
+.subtitle { color: #667085; font-size: 13px; margin: 8px 0 25px; }
+
+label {
+  display: block;
+  font-weight: bold;
+  margin: 16px 0 7px;
+  font-size: 14px;
+}
+
+input, textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #d5dbe5;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+textarea { resize: vertical; min-height: 75px; }
+
+button {
+  border: 0;
+  padding: 13px 16px;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.primary {
+  background: #1769e0;
+  color: white;
+  width: 100%;
+  margin-top: 20px;
+}
+
+.secondary {
+  background: #e9eef7;
+  color: #26364d;
+  width: 100%;
+  margin-top: 10px;
+}
+
+button:hover { opacity: .88; }
+
+.result {
+  background: #f5f7fa;
+  padding: 15px;
+  border-radius: 8px;
+  margin-top: 20px;
+}
+
+.small {
+  font-size: 12px;
+  color: #667085;
+  line-height: 1.5;
+}
+
+#prompt {
+  min-height: 220px;
+  font-size: 12px;
+  background: #fafafa;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <h1>🧠 Test Assistant AI</h1>
+  <p class="subtitle">
+    Asistente de análisis de preguntas para prácticas académicas
+  </p>
+
+  <label>Asignatura</label>
+  <input id="subject" placeholder="Ej. Transformación digital">
+
+  <label>Pregunta</label>
+  <textarea id="question"
+    placeholder="Introduce aquí una pregunta de práctica..."></textarea>
+
+  <label>Opción A</label>
+  <input id="a" placeholder="Respuesta A">
+
+  <label>Opción B</label>
+  <input id="b" placeholder="Respuesta B">
+
+  <label>Opción C</label>
+  <input id="c" placeholder="Respuesta C">
+
+  <label>Opción D</label>
+  <input id="d" placeholder="Respuesta D">
+
+  <label>Documentación adicional (opcional)</label>
+  <textarea id="docs"
+    placeholder="Pega fragmentos de apuntes o documentación autorizada..."></textarea>
+
+  <button class="primary" onclick="generatePrompt()">
+    Preparar análisis con IA
+  </button>
+
+  <div id="output" style="display:none">
+
+    <div class="result">
+      <strong>Consulta preparada</strong>
+      <p class="small">
+        Copia el contenido y pégalo en tu conversación de ChatGPT.
+      </p>
+
+      <textarea id="prompt" readonly></textarea>
+
+      <button class="primary" onclick="copyPrompt()">
+        Copiar consulta
+      </button>
+
+      <button class="secondary" onclick="openChatGPT()">
+        Abrir ChatGPT
+      </button>
+
+      <p id="status" class="small"></p>
+    </div>
+
+  </div>
+
+  <p class="small" style="margin-top:25px">
+    Herramienta de apoyo para simulacros y evaluaciones de práctica
+    autorizadas. No envía automáticamente información a servicios
+    externos. Revisa el contenido antes de compartirlo.
+  </p>
+
+</div>
+
+<script>
+
+function generatePrompt() {
+
+  const subject = document.getElementById("subject").value.trim();
+  const question = document.getElementById("question").value.trim();
+
+  const a = document.getElementById("a").value.trim();
+  const b = document.getElementById("b").value.trim();
+  const c = document.getElementById("c").value.trim();
+  const d = document.getElementById("d").value.trim();
+  const docs = document.getElementById("docs").value.trim();
+
+  if (!question || !a || !b || !c || !d) {
+    alert("Completa la pregunta y las cuatro opciones.");
+    return;
+  }
+
+  const prompt = `
+Actúa como un tutor académico experto en preguntas tipo test.
+
+CONTEXTO:
+Asignatura: ${subject || "No especificada"}
+
+PREGUNTA:
+${question}
+
+OPCIONES:
+A) ${a}
+B) ${b}
+C) ${c}
+D) ${d}
+
+DOCUMENTACIÓN PROPORCIONADA:
+${docs || "No se ha proporcionado documentación específica."}
+
+INSTRUCCIONES:
+
+1. Analiza cuidadosamente la pregunta.
+2. Contrasta las cuatro opciones.
+3. Prioriza la documentación proporcionada cuando exista.
+4. Si falta información, utiliza conocimientos contrastados y,
+   cuando tengas acceso a búsqueda web, consulta fuentes fiables.
+5. No inventes referencias ni afirmes haber consultado fuentes
+   que no hayas podido verificar.
+6. Si hay ambigüedad, indícalo expresamente.
+
+FORMATO DE RESPUESTA:
+
+- Opción propuesta: A, B, C o D.
+- Explicación breve.
+- Por qué las otras opciones no son adecuadas.
+- Fuente o fundamento utilizado.
+- Nivel de confianza: alto, medio o bajo.
+`;
+
+  document.getElementById("prompt").value = prompt;
+  document.getElementById("output").style.display = "block";
+  document.getElementById("status").textContent =
+    "Consulta preparada correctamente.";
+}
+
+async function copyPrompt() {
+
+  const text = document.getElementById("prompt").value;
+  const status = document.getElementById("status");
+
+  try {
+    await navigator.clipboard.writeText(text);
+    status.textContent = "Consulta copiada. Ya puedes pegarla en ChatGPT.";
+  } catch (error) {
+    document.getElementById("prompt").select();
+    status.textContent = "Selecciona y copia el texto manualmente.";
+  }
+}
+
+function openChatGPT() {
+  window.open("https://chatgpt.com/", "_blank");
+}
+
+</script>
+
+</body>
+</html>
